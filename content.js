@@ -1,4 +1,5 @@
 let isActive = false;
+let isRecording = false;
 let overlay = null;
 let testIdAttr = 'data-testid'; // Default test ID attribute
 let lastRightClickedElement = null;
@@ -12,10 +13,105 @@ chrome.storage.sync.get({
     testIdAttr = settings.testIdAttr;
 });
 
+// Initialize recording state from background script
+chrome.runtime.sendMessage({ action: 'getRecordingState' }, response => {
+    if (response) {
+        isRecording = response.isRecording;
+        if (isRecording) {
+            addRecordingListeners();
+        }
+    }
+});
+
 // Store the element on right click
 document.addEventListener('contextmenu', function (e) {
     lastRightClickedElement = e.target;
 });
+
+// Record user actions
+function recordAction(action, element) {
+    if (!isRecording) return;
+
+    const locator = generatePlaywrightLocator(element);
+    let playwrightAction = '';
+
+    switch (action) {
+        case 'click':
+            playwrightAction = `await ${locator}.click();`;
+            break;
+        case 'input':
+            const value = element.value || '';
+            playwrightAction = `await ${locator}.fill('${value.replace(/'/g, "\\'")}');`;
+            break;
+        case 'select':
+            const selectedOption = element.options[element.selectedIndex];
+            const optionText = selectedOption ? selectedOption.text : '';
+            playwrightAction = `await ${locator}.selectOption({ label: '${optionText.replace(/'/g, "\\'")}' });`;
+            break;
+        case 'check':
+            playwrightAction = `await ${locator}.check();`;
+            break;
+        case 'uncheck':
+            playwrightAction = `await ${locator}.uncheck();`;
+            break;
+    }
+
+    if (playwrightAction) {
+        console.log('Recording action:', playwrightAction); // Debug log
+        try {
+            // Send message to background script
+            chrome.runtime.sendMessage({
+                action: 'recordedAction',
+                value: playwrightAction
+            });
+        } catch (error) {
+            console.error('Error sending recorded action:', error);
+        }
+    }
+}
+
+// Add event listeners for recording
+function addRecordingListeners() {
+    console.log('Adding recording listeners');
+    document.addEventListener('click', handleClick, true);
+    document.addEventListener('input', handleInput, true);
+    document.addEventListener('change', handleChange, true);
+    isRecording = true;
+}
+
+function removeRecordingListeners() {
+    console.log('Removing recording listeners');
+    document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('input', handleInput, true);
+    document.removeEventListener('change', handleChange, true);
+    isRecording = false;
+}
+
+function handleClick(e) {
+    if (isRecording) {
+        console.log('Recording click event');
+        recordAction('click', e.target);
+    }
+}
+
+function handleInput(e) {
+    if (isRecording) {
+        console.log('Recording input event');
+        const element = e.target;
+        if (element.tagName === 'INPUT' && (element.type === 'checkbox' || element.type === 'radio')) {
+            recordAction(element.checked ? 'check' : 'uncheck', element);
+        } else {
+            recordAction('input', element);
+        }
+    }
+}
+
+function handleChange(e) {
+    if (isRecording && e.target.tagName === 'SELECT') {
+        console.log('Recording change event');
+        recordAction('select', e.target);
+    }
+}
 
 function getElementRole(element) {
 
@@ -78,16 +174,34 @@ function generatePlaywrightLocator(element) {
         return `page.getByTestId('${testId}')`;
     }
 
+    // Check for name attribute
+    const name = element.getAttribute('name');
+    if (name) {
+        return `page.locator('[name="${name}"]')`;
+    }
+
+    // Check for class attribute
+    const className = element.getAttribute('class');
+    if (className) {
+        // If there's only one class, use it directly
+        if (!className.includes(' ')) {
+            return `page.locator('.${className}')`;
+        }
+        // If there are multiple classes, use the first one
+        const firstClass = className.split(' ')[0];
+        return `page.locator('.${firstClass}')`;
+    }
+
     // Try to get the most specific and reliable locator
     const role = getElementRole(element);
-    const name = element.getAttribute('aria-label') ||
+    const accessibleName = element.getAttribute('aria-label') ||
         element.textContent.trim() ||
         element.getAttribute('title') ||
         element.getAttribute('placeholder') ||
         element.getAttribute('alt');
 
-    if (role && name) {
-        return `page.getByRole('${role}', { name: '${name}' })`;
+    if (role && accessibleName) {
+        return `page.getByRole('${role}', { name: '${accessibleName}' })`;
     }
 
     if (element.id) {
@@ -227,11 +341,20 @@ function showNotification(message, isError = false) {
 
 // Listen for messages from the popup and background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log('Content script received message:', request);
     switch (request.action) {
         case 'initialize':
             isActive = request.settings.isActive;
             testIdAttr = request.settings.testIdAttr;
-            updateUI();
+            // Immediately check recording state
+            chrome.runtime.sendMessage({ action: 'getRecordingState' }, response => {
+                isRecording = response?.isRecording || false;
+                if (isRecording) {
+                    addRecordingListeners();
+                    showNotification('Recording resumed');
+                }
+                updateUI();
+            });
             break;
         case 'toggle':
             isActive = request.value;
@@ -240,6 +363,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         case 'updateTestIdAttr':
             if (request.value) {
                 testIdAttr = request.value;
+            }
+            break;
+        case 'toggleRecording':
+            console.log('Toggle recording:', request.value);
+            isRecording = request.value;
+            if (isRecording) {
+                addRecordingListeners();
+                showNotification('Recording started');
+            } else {
+                removeRecordingListeners();
+                showNotification('Recording stopped');
             }
             break;
         case 'getLocator':
@@ -255,6 +389,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             break;
     }
+    return true;
 });
 
 // Add event listeners

@@ -92,6 +92,62 @@
             color: #666;
             margin-top: 10px;
         }
+
+        .recording-controls {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .record-button {
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .record-button.recording {
+            background-color: #666;
+        }
+
+        .recorded-actions {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 8px;
+        }
+
+        .action-item {
+            margin-bottom: 4px;
+            padding: 4px;
+            background-color: #f5f5f5;
+            border-radius: 2px;
+        }
+
+        .copy-actions {
+            margin-top: 8px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        /* Add this to ensure actions list is visible when populated */
+        #recordedActions[style] {
+            display: block !important;
+        }
     </style>
 </head>
 
@@ -112,6 +168,13 @@
     <div class="description">
         Hover over elements to see their Playwright locators. The extension will highlight elements and show the best
         matching locator. Set your preferred test ID attribute name above.
+    </div>
+    <div class="recording-controls">
+        <button id="recordButton" class="record-button">Start Recording</button>
+        <div id="recordedActions" class="recorded-actions" style="display: none;">
+            <div id="actionsList"></div>
+            <button id="copyActions" class="copy-actions">Copy All Actions</button>
+        </div>
     </div>
     <script src="popup.js"></script>
 </body>
