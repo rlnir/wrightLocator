@@ -5,7 +5,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const recordedActions = document.getElementById('recordedActions');
     const actionsList = document.getElementById('actionsList');
     const copyActions = document.getElementById('copyActions');
+    const clearActions = document.getElementById('clearActions');
     let isRecording = false;
+
+    // Clear recorded actions
+    clearActions.addEventListener('click', function () {
+        chrome.runtime.sendMessage({ action: 'clearRecordedActions' }, response => {
+            if (response && response.success) {
+                actionsList.innerHTML = '';
+                recordedActions.style.display = 'none';
+            }
+        });
+    });
 
     // Get recorded actions from background script
     function loadRecordedActions() {

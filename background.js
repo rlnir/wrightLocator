@@ -49,7 +49,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             break;
 
         case 'clearRecordedActions':
+            // Clear all recorded actions
             recordedActions = [];
+            sendResponse({ success: true });
             break;
 
         case 'toggleRecording':
